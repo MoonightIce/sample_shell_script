@@ -24,9 +24,16 @@ if [ $1 != $target_fold ]; then
 fi
 }
 
-function is_empty_dir(){
-    return $(ls -A $1|wc -w)
+# 忽略隐藏文件，判断文件夹是否为空
+function is_empty_dir_ignore_hiddenfile(){
+    return $(ls $1|wc -l)
 }
+
+# 不隐藏文件
+function is_empty_dir(){
+    return $(ls -A $1|wc -l)
+}
+
 # wc 语法 统计指定的字数或行数 wc是(Word Count)的缩写
 #-c 统计字节数。
 #-l 统计行数。
@@ -41,9 +48,11 @@ for file in $(ls $1)
 do
     # 拼接路径 判断是文件还是文件夹
     dir_or_file=$1"/"$file
+    #判断是不是文件夹
     if [ -d $dir_or_file ]; then
 #        echo $dir_or_file
         getAllDir $dir_or_file
+    #判断是不是文件
     elif [ -f "$dir_or_file" ];then
 #        echo "$file"
         # 将文件移动到目标文件夹
@@ -53,7 +62,7 @@ do
     fi
 done
 # 删除还有问题，文件夹内会有隐藏文件，就没有删除
-if is_empty_dir $1 ; then
+if is_empty_dir_ignore_hiddenfile $1 ; then
     
 #    echo "empty"
     rm -r $1
