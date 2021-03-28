@@ -64,13 +64,21 @@ done
 # 删除还有问题，文件夹内会有隐藏文件，就没有删除
 if is_empty_dir_ignore_hiddenfile $1 ; then
     
-#    echo "empty"
-    rm -r $1
+   echo "$1 empty"
+    #rm -r $1
 else
-    echo $1
-    empty=$(ls -A $1)
-    echo " not empty"
+    #echo $1
+    #empty=$(ls -A $1)
+    echo "$1 not empty"
 fi
+
+if [ $1 != $fold_path ]; then
+    if [ $1 != $target_fold ]; then
+        echo "not root path so rm to trash"
+        mv $1  ~/.Trash
+    fi
+fi
+
 }
 getAllDir $fold_path
 
