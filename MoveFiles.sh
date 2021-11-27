@@ -17,7 +17,7 @@ function moveFile() {
 # $1 是文件所在的路径 $2 是文件名
 if [ $1 != $target_fold ]; then
     if [ -f $target_fold"/"$2 ]; then
-        mv $1"/"$2 $target_fold"/"$2"_1"
+        mv $1"/"$2 $target_fold"/"$2""_1"
     else
         mv $1"/"$2 $target_fold
     fi
@@ -44,6 +44,8 @@ function is_empty_dir(){
 #--version 显示版本信息
 
 function getAllDir() {
+IFS_BACKUP=$IFS
+IFS=$'\n'
 for file in $(ls $1)
 do
     # 拼接路径 判断是文件还是文件夹
@@ -78,21 +80,40 @@ if [ $1 != $fold_path ]; then
         mv $1  ~/.Trash
     fi
 fi
-
+IFS=$IFS_BACKUP
 }
 getAllDir $fold_path
 
 
 # 获取当前列表下的文件 $(ls $fold_path)
-#for file in $(ls $fold_path)
+#function getAllDirTest() {
+#IFS_BACKUP=$IFS
+#IFS=$'\n'
+#for file in $(ls $1)
 #do
 #    # 拼接路径 判断是文件还是文件夹
 #    dir_or_file=$fold_path"/"$file
 #    if [ -d "$dir_or_file" ]; then
-#        echo "$file is a dir"
+#        echo "$dir_or_file is a dir"
+#        getAllDirTest $dir_or_file
 #    elif [ -f "$dir_or_file" ];then
-#        echo "$file is a file"
+#
+##           正则表达式
+##        local ccfile="/.*\.cc\s*$/"
+##        local path=$dir_or_file
+##        local name=$file
+##        local size=`du -b --max-depth=1 $path|awk '{print $1}'`
+##          if [[ "$name" =~ $ccfile ]]
+##                then
+##            else
+##          fi
+##        echo $path  $size
+#        echo "$dir_or_file is a file"
 #    else
-#        echo "it is a none"
+#        echo "$dir_or_file it is none"
 #    fi
 #done
+#IFS=$IFS_BACKUP
+#}
+
+getAllDirTest $fold_path
