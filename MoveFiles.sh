@@ -17,7 +17,7 @@ function moveFile() {
 # $1 是文件所在的路径 $2 是文件名
 if [ $1 != $target_fold ]; then
     if [ -f $target_fold"/"$2 ]; then
-        mv $1"/"$2 $target_fold"/"$2""_1"
+        mv $1"/"$2 $target_fold"/"$2"_1"
     else
         mv $1"/"$2 $target_fold
     fi
@@ -98,16 +98,16 @@ getAllDir $fold_path
 #        getAllDirTest $dir_or_file
 #    elif [ -f "$dir_or_file" ];then
 #
-##           正则表达式
-##        local ccfile="/.*\.cc\s*$/"
-##        local path=$dir_or_file
-##        local name=$file
-##        local size=`du -b --max-depth=1 $path|awk '{print $1}'`
-##          if [[ "$name" =~ $ccfile ]]
-##                then
-##            else
-##          fi
-##        echo $path  $size
+#           正则表达式
+#        local ccfile="/.*\.cc\s*$/"
+#        local path=$dir_or_file
+#        local name=$file
+#        local size=`du -b --max-depth=1 $path|awk '{print $1}'`
+#          if [[ "$name" =~ $ccfile ]]
+#                then
+#            else
+#          fi
+#        echo $path  $size
 #        echo "$dir_or_file is a file"
 #    else
 #        echo "$dir_or_file it is none"
@@ -115,5 +115,4 @@ getAllDir $fold_path
 #done
 #IFS=$IFS_BACKUP
 #}
-
-getAllDirTest $fold_path
+#getAllDirTest $fold_path
