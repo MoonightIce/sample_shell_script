@@ -43,3 +43,21 @@ DEDUP_MODE=none ./MoveFiles.sh ~/Downloads ~/Videos
 - 目录清理规则（移入废纸篓 ~/.Trash，可恢复，不会 rm）：①移动后变空的目录；②只剩被跳过重复文件的"壳目录"（其中没有任何其他文件时才会删，移动失败/未处理的文件会阻止删除）
 - 所有进废纸篓的操作（非视频文件/重复文件/空目录/壳目录）同名冲突时自动加 `_1` 序号，不会覆盖已有文件
 - 非空目录不会删除；重复文件被跳过时所在目录会保留
+
+### one_music_library
+Claude Code skill + Python 脚本，把 1music.cc 的浏览器下载流程和本地音乐库整理串起来：下载后的音频交给 [`ghcr.io/laoning666/lyricflow`](https://github.com/laoning666/lyricflow) 补歌词/封面/基础标签，再按 `album` 标签归档到目标库目录。
+
+- [`SKILL.md`](one_music_library/SKILL.md)：Claude Code skill 定义，描述何时用浏览器操作 1music.cc、何时调用脚本。
+- [`references/site-flow.md`](one_music_library/references/site-flow.md)：1music.cc 页面流程记录（Turnstile 验证、搜索、下载）。
+- [`scripts/music_workflow.py`](one_music_library/scripts/music_workflow.py)：核心脚本，暂存下载文件 → 跑 LyricFlow 容器 → 用 `ffprobe` 读 `album` 标签归档 → 写 JSON 清单。
+- [`bin/music-workflow`](one_music_library/bin/music-workflow)：命令行入口，转发到上面的 Python 脚本。
+
+用法示例：
+```bash
+./one_music_library/bin/music-workflow \
+  --source "/absolute/path/to/Artist - Title.flac" \
+  --library "/absolute/path/to/library" \
+  --move-source
+```
+
+依赖：`python3`、`ffprobe`（FFmpeg）、`docker`（跑 LyricFlow 镜像，默认 `API_PROVIDER=lrcapi`）。加 `--dry-run` 只打印计划的 docker 命令和源文件，不写入、不联网。

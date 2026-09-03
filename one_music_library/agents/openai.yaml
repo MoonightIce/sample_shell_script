@@ -1,0 +1,4 @@
+interface:
+  display_name: "1Music 曲库整理"
+  short_description: "从 1music 下载并用 LyricFlow 补全信息后按专辑归档"
+  default_prompt: "使用 1Music 下载目标歌曲，并用 LyricFlow 补齐歌词和专辑信息后按专辑归档。"
