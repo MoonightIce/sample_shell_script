@@ -14,3 +14,6 @@ video_search/scripts/__pycache__/
 
 # 系统文件
 .DS_Store
+
+# music_search_cdp: local node deps (reinstall with npm install puppeteer-core)
+music_search_cdp/node_modules/

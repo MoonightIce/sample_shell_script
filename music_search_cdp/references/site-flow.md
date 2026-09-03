@@ -34,9 +34,20 @@ over CDP (not a sandboxed/headless browser).
   - Do not call this endpoint directly outside the browser flow (Turnstile and the
     expiring signature make direct requests brittle even if the shape is known).
 
+## The download click-through (scripts/download_1music.js)
+
+Confirmed by driving it end to end: clicking a format radio then "下载" opens a **new
+tab** (`browser.once('targetcreated', ...)` fires) navigated to the `/download` URL
+described above — not always though; treat both same-tab and new-tab as possible.
+That tab shows "正在下载 <title>" plus ad-disclaimer text while it transcodes, then
+drives a normal Chrome file save, and appears to close itself shortly after — don't
+rely on that tab still being open, or on its CDP session still being alive, as a signal
+that the download finished. Detect completion by polling the destination directory for
+a file whose size has stopped changing instead.
+
+Observed transcode times: roughly 30s–3min depending on the track. No correlation found
+yet between file size and wait time worth hard-coding a shorter timeout around.
+
 ## What this skill does not verify or do
 
 - It does not confirm 1music.cc's actual source/licensing of the audio.
-- It does not click through the download modal or wait out the `/download` page.
-- If a caller wants that automated too, that's a distinct, explicit ask — treat it
-  as a new decision, not an extension of "search for a song."

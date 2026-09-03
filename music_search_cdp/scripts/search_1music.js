@@ -1,6 +1,7 @@
-// Connects to a local Chrome over CDP, opens 1music.cc, waits out Cloudflare
-// Turnstile, searches for a song, and prints the top N result cards as JSON.
-// Does not click any download button and does not fetch/save any audio file.
+// Connects to a local Chrome over CDP, opens (or reuses) a 1music.cc tab, waits
+// out Cloudflare Turnstile, searches for a song, and prints the matching result
+// cards as JSON. Does not click any download button and does not fetch/save any
+// audio file.
 //
 // Usage:
 //   node search_1music.js "<query>" [limit] [cdpPort]
@@ -10,8 +11,7 @@
 //     (default 9223), e.g.:
 //       open -na "Google Chrome" --args --remote-debugging-port=9223 \
 //         --user-data-dir=/tmp/chrome-cdp-profile
-//   - npm install puppeteer-core (in the same directory as this script, or a
-//     parent node_modules)
+//   - npm install puppeteer-core (in this directory, or a parent node_modules)
 
 const puppeteer = require('puppeteer-core');
 
@@ -24,16 +24,21 @@ if (!QUERY) {
   process.exit(1);
 }
 
-async function main() {
-  const browser = await puppeteer.connect({
-    browserURL: `http://127.0.0.1:${PORT}`,
-    defaultViewport: null,
-  });
-
+// Reuse an existing 1music.cc tab if one is already open instead of always
+// spawning a new one — searches run repeatedly against the same session.
+async function getOrCreatePage(browser) {
+  const pages = await browser.pages();
+  const existing = pages.find((p) => p.url().includes('1music.cc') && !p.url().includes('/download'));
+  if (existing) {
+    await existing.bringToFront();
+    return existing;
+  }
   const page = await browser.newPage();
   await page.goto('https://1music.cc/zh-CN', { waitUntil: 'networkidle2' });
+  return page;
+}
 
-  // Wait for Cloudflare Turnstile to clear in this real browser window.
+async function waitForTurnstile(page) {
   try {
     await page.waitForFunction(() => {
       const input = document.querySelector(
@@ -42,35 +47,69 @@ async function main() {
       return input && !/验证/.test(input.placeholder || '');
     }, { timeout: 60000 });
   } catch (e) {
-    console.error(
+    throw new Error(
       '验证未在 60 秒内通过。若窗口里出现可交互的验证挑战，请手动完成后重新运行。'
     );
-    await browser.disconnect();
-    process.exit(1);
   }
+}
 
+// The site fires GET https://api.1music.cc/search?songs=... once the query is
+// submitted. Waiting on that response (rather than a fixed sleep or a guess at
+// when innerText changes) is what makes this reliable — pressing Enter too
+// soon after typing, or trusting a text-based heuristic, both let the page's
+// still-showing homepage recommendations get read as if they were results.
+async function search(page, query) {
   const input = await page.$('input[type="search"], input[type="text"]');
-  await input.click({ clickCount: 3 });
-  await input.type(QUERY, { delay: 50 });
+  await input.click();
+  // Triple-click + Backspace is not reliable on this React-controlled field
+  // (leftover text from a prior search can survive and get a new query
+  // appended after it). Force the value empty via the native setter + a real
+  // 'input' event so React's onChange actually sees the field as cleared.
+  await input.evaluate((el) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(el, '');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await input.type(query, { delay: 60 });
+  await new Promise((r) => setTimeout(r, 500));
+
+  const responsePromise = page.waitForResponse(
+    (res) => res.url().includes('api.1music.cc/search'),
+    { timeout: 15000 }
+  ).catch(() => null);
+
   await page.keyboard.press('Enter');
-
-  // Wait for the results grid to actually reflect the query instead of a fixed
-  // sleep — the homepage's default/recommended cards look just like real
-  // results and a short sleep can read them before the search updates the DOM.
-  try {
-    await page.waitForFunction((q) => {
-      const firstChar = q.trim()[0];
-      return document.body.innerText.includes(firstChar);
-    }, { timeout: 15000 }, QUERY);
-  } catch (e) {
-    console.error('搜索结果未在 15 秒内更新，可能是这首歌没有匹配结果。');
+  const response = await responsePromise;
+  if (!response) {
+    throw new Error('搜索请求未在 15 秒内发出/响应，可能页面状态异常，请重试。');
   }
-  await new Promise((r) => setTimeout(r, 800));
+  // Let the DOM finish rendering the new cards after the API response lands.
+  await new Promise((r) => setTimeout(r, 700));
+}
 
-  const results = await page.evaluate((limit) => {
-    // Each result card: a download-icon button whose closest reasonably-sized
-    // ancestor's text is "<title><artist> · <album/other>". We don't have a
-    // stable class name to key off, so walk up from each icon button.
+// Search occasionally fails transiently (Turnstile re-triggering, a stuck
+// page state, a slow backend). On failure, wait 15s and reload the page once
+// before trying again, rather than failing the whole batch immediately.
+async function searchWithRetry(page, query, retries = 1) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await search(page, query);
+      return;
+    } catch (e) {
+      if (attempt >= retries) throw e;
+      console.error(`${e.message} 等待 15 秒后刷新页面重试...`);
+      await new Promise((r) => setTimeout(r, 15000));
+      await page.reload({ waitUntil: 'networkidle2' });
+      await waitForTurnstile(page);
+    }
+  }
+}
+
+// Marks each real result card's download button with a stable data attribute
+// (data-1music-idx) so a later script invocation can click the same card by
+// index without relying on fragile structural assumptions surviving twice.
+async function extractCards(page, limit) {
+  return page.evaluate((limit) => {
     const buttons = Array.from(document.querySelectorAll('button')).filter((b) =>
       b.querySelector('svg')
     );
@@ -79,16 +118,46 @@ async function main() {
       let el = btn;
       for (let i = 0; i < 6 && el; i++, el = el.parentElement) {
         const text = (el.textContent || '').trim();
-        if (text.length > 0 && text.length < 200 && el.querySelector('img')) {
-          cards.push(text);
+        if (
+          text.length > 0 &&
+          text.length < 200 &&
+          el.querySelector('img') &&
+          !text.includes('Kolis Music') &&
+          !text.includes('补给站')
+        ) {
+          cards.push({ text, btn });
           break;
         }
       }
     }
-    return cards.slice(0, limit);
-  }, LIMIT);
+    const top = cards.slice(0, limit);
+    top.forEach(({ btn }, idx) => btn.setAttribute('data-1music-idx', String(idx)));
+    return top.map(({ text }, idx) => ({ index: idx, text }));
+  }, limit);
+}
 
-  console.log(JSON.stringify({ query: QUERY, results }, null, 2));
+async function main() {
+  const browser = await puppeteer.connect({
+    browserURL: `http://127.0.0.1:${PORT}`,
+    defaultViewport: null,
+  });
+
+  const page = await getOrCreatePage(browser);
+  await waitForTurnstile(page);
+
+  try {
+    await searchWithRetry(page, QUERY);
+  } catch (e) {
+    console.error(e.message);
+    await browser.disconnect();
+    process.exit(1);
+  }
+
+  const cards = await extractCards(page, LIMIT);
+  if (cards.length === 0) {
+    console.error('没有找到匹配结果。');
+  }
+  console.log(JSON.stringify({ query: QUERY, results: cards }, null, 2));
 
   await browser.disconnect();
 }

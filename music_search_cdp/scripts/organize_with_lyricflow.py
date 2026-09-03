@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
-"""Stage new audio, run LyricFlow, and organize the result by album."""
+"""Stage downloaded audio, run the LyricFlow docker tool (lyrics + cover art),
+then file the result into the music library by its album tag.
 
+Every matched audio file is MOVED (not copied) out of --source into the
+library, tagged in place by LyricFlow, then filed under library/<album>/.
+Don't point --source at files you want to keep in place.
+
+Usage:
+  python3 organize_with_lyricflow.py --source "/path/to/song.flac"
+  python3 organize_with_lyricflow.py --source /path/to/dir --library /Users/admin/Documents/Music
+  python3 organize_with_lyricflow.py --source song.flac --dry-run
+  python3 organize_with_lyricflow.py --source song.flac --skip-lyricflow   # organize only
+"""
 from __future__ import annotations
 
 import argparse
@@ -17,16 +28,14 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 DEFAULT_LIBRARY = Path("/Users/admin/Documents/Music")
-IMAGE = "ghcr.io/laoning666/lyricflow:latest"
+IMAGE = "laoning666/lyricflow:latest"
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".ape", ".wma"}
 TEMP_SUFFIXES = {".crdownload", ".part", ".download", ".tmp"}
 INVALID_COMPONENT = re.compile(r"[/:\\\x00-\x1f]")
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Process explicitly supplied downloads with LyricFlow and file them by album."
-    )
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--source", action="append", required=True, type=Path,
                         help="Downloaded audio file or directory; repeat for multiple sources.")
     parser.add_argument("--library", type=Path, default=DEFAULT_LIBRARY,
@@ -34,13 +43,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--provider", choices=("lrcapi", "tunehub"), default="lrcapi")
     parser.add_argument("--lrcapi-url", default="https://api.lrc.cx",
                         help="LrcApi base URL when --provider=lrcapi.")
-    parser.add_argument("--move-source", action="store_true",
-                        help="Move exact source files into staging; directories are never moved.")
     parser.add_argument("--keep-stage", action="store_true",
-                        help="Keep the empty or residual run directory after success.")
+                        help="Keep the run's staging directory after success (for debugging).")
     parser.add_argument("--dry-run", action="store_true",
                         help="Validate inputs and print planned actions without writes or network calls.")
-    parser.add_argument("--skip-lyricflow", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--skip-lyricflow", action="store_true",
+                        help="Skip the docker step; only organize by album tag.")
     return parser.parse_args(argv)
 
 
@@ -96,15 +104,27 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def stage_files(files: Sequence[Path], incoming: Path, move_source: bool) -> List[Path]:
+def matching_sidecars(audio: Path) -> List[Path]:
+    result = []
+    for suffix in (".lrc", ".txt"):
+        candidate = audio.with_suffix(suffix)
+        if candidate.exists():
+            result.append(candidate)
+    return result
+
+
+def nearby_covers(audio: Path) -> List[Path]:
+    names = {"cover.jpg", "cover.jpeg", "cover.png", "folder.jpg", "folder.png"}
+    return [p for p in audio.parent.iterdir() if p.is_file() and p.name.casefold() in names]
+
+
+def stage_files(files: Sequence[Path], incoming: Path) -> List[Path]:
     incoming.mkdir(parents=True, exist_ok=False)
     staged: List[Path] = []
     for source in files:
         companions = matching_sidecars(source) + nearby_covers(source)
         target = unique_path(incoming / source.name)
-        if move_source:
-            if not source.is_file():
-                fail("--move-source accepts exact files only")
+        if source.is_file():
             shutil.move(str(source), str(target))
         else:
             shutil.copy2(source, target)
@@ -163,20 +183,6 @@ def read_tags(path: Path) -> Dict[str, str]:
     payload = json.loads(result.stdout or "{}")
     tags = payload.get("format", {}).get("tags", {}) or {}
     return {str(key).casefold(): str(value) for key, value in tags.items()}
-
-
-def matching_sidecars(audio: Path) -> List[Path]:
-    result = []
-    for suffix in (".lrc", ".txt"):
-        candidate = audio.with_suffix(suffix)
-        if candidate.exists():
-            result.append(candidate)
-    return result
-
-
-def nearby_covers(audio: Path) -> List[Path]:
-    names = {"cover.jpg", "cover.jpeg", "cover.png", "folder.jpg", "folder.png"}
-    return [p for p in audio.parent.iterdir() if p.is_file() and p.name.casefold() in names]
 
 
 def move_or_deduplicate(source: Path, destination: Path) -> Tuple[Path, bool]:
@@ -256,8 +262,6 @@ def remove_empty_tree(root: Path) -> None:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
-    if args.move_source and any(path.expanduser().is_dir() for path in args.source):
-        fail("--move-source requires exact file sources, not directories")
     library = args.library.expanduser().resolve()
     files = collect_audio(args.source)
     run_id = dt.datetime.now().strftime("%Y%m%dT%H%M%S") + f"-{os.getpid()}"
@@ -269,14 +273,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print("sources:")
     for path in files:
         print(f"  - {path}")
-    print("docker:", " ".join(command))
+    if not args.skip_lyricflow:
+        print("docker:", " ".join(command))
     if args.dry_run:
         print("dry-run: no files changed and LyricFlow was not contacted")
         return 0
 
     library.mkdir(parents=True, exist_ok=True)
     preflight(args.skip_lyricflow)
-    staged = stage_files(files, incoming, args.move_source)
+    staged = stage_files(files, incoming)
     started_at = dt.datetime.now(dt.timezone.utc).isoformat()
     try:
         if not args.skip_lyricflow:
@@ -288,6 +293,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "completed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             "provider": args.provider,
             "image": IMAGE,
+            "skipped_lyricflow": args.skip_lyricflow,
             "sources": [str(path) for path in files],
             "staged": [str(path) for path in staged],
             "tracks": records,
