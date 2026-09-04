@@ -19,3 +19,6 @@ video_search/scripts/__pycache__/
 music_search_cdp/node_modules/
 .superpowers/
 music_charts/.venv/
+
+# music_charts: run output, not committed
+music_charts/output/
