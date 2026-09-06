@@ -19,6 +19,12 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE))
 
+# 环境自举: 自动使用项目 venv(video_search/.venv)运行, 无需手动指定解释器/装依赖
+import env_check  # noqa: E402
+env_check.ensure_playwright()
+env_check.check_ffmpeg()
+env_check.check_chrome()
+
 import download_queue as dq
 import download_browser as db
 

@@ -4,8 +4,9 @@
 backfill_meta.py — 为已完成下载但缺元信息 sidecar 的任务补抓元信息。
 
 场景: 旧版 download_queue.py 完成的下载(如 ssis073)没有产出 <id>.json。
-本脚本扫描 data/downloads/*.mp4, 找出缺同名 .json 的, 打开详情页抓取
-标题/描述/分类/系列/演员/字幕 等元信息, 写 sidecar 并回写队列 meta 摘要。
+本脚本扫描 /Users/moonightice/Movies/系列/*.mp4, 找出缺同名 sidecar 的,
+打开详情页抓取 标题/描述/分类/系列/演员/字幕 等元信息,
+写 sidecar 到 data/downloads/<id>.json 并回写队列 meta 摘要。
 
 用法:
   python backfill_meta.py                  # 补齐所有缺 sidecar 的任务
@@ -21,10 +22,16 @@ from pathlib import Path
 os.environ.pop("NODE_OPTIONS", None)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# 环境自举: 自动使用项目 venv(video_search/.venv)运行, 无需手动指定解释器/装依赖
+import env_check  # noqa: E402
+env_check.ensure_playwright()
+
 import meta_extract as me
 
 BASE = Path(__file__).resolve().parent.parent
-DOWNLOADS = BASE / "data" / "downloads"
+VIDEO_DIR = Path("/Users/moonightice/Movies/系列")  # 最终视频输出目录
+WORK_DIR = BASE / "data" / "downloads"              # sidecar 输出目录
 QUEUE_FILE = BASE / "data" / "download_queue.json"
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
       "AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36")
@@ -49,9 +56,9 @@ def find_missing():
     url_by_id = {t["id"]: t.get("url", "") for t in q["tasks"]}
     title_by_id = {t["id"]: t.get("title", "") for t in q["tasks"]}
     missing = []
-    for mp4 in sorted(DOWNLOADS.glob("*.mp4")):
+    for mp4 in sorted(VIDEO_DIR.glob("*.mp4")):
         vid = mp4.stem
-        sidecar = mp4.with_suffix(".json")
+        sidecar = WORK_DIR / f"{vid}.json"
         if sidecar.exists():
             continue
         missing.append({
@@ -120,7 +127,7 @@ def main():
         meta["id"] = vid
         meta["video_file"] = str(m["mp4"])
         meta["video_size"] = m["mp4"].stat().st_size
-        sidecar = m["mp4"].with_suffix(".json")
+        sidecar = WORK_DIR / f"{vid}.json"
         sidecar.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"  ✓ sidecar: {sidecar.name}")
         print(f"    标题: {meta.get('title','')[:50]}")

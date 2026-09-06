@@ -14,7 +14,15 @@ search_missav.py — 用真实 Chrome 在 missav 站内按关键词搜索，提�
 import sys, json, asyncio, argparse, os
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 os.environ.pop("NODE_OPTIONS", None)
+
+# 环境自举: 自动使用项目 venv(video_search/.venv)运行, 无需手动指定解释器/装依赖
+import env_check  # noqa: E402
+env_check.ensure_playwright()
+
+from playwright.async_api import async_playwright  # noqa: E402
 
 async def main(keyword: str, enqueue: bool = False, limit: int = 0):
     async with async_playwright() as p:

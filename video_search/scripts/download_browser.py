@@ -12,24 +12,37 @@ download_browser.py — 浏览器会话内 fetch 全部分片下载 HLS 视频(�
 最后: 本地构造 m3u8, ffmpeg concat 合并为 mp4。
 
 用法:
-  python download_browser.py <page_url> <out.mp4> [--seg SEC] [--retries N]
+  python download_browser.py <page_url> <out.mp4> [--seg SEC] [--retries N] [--work-dir DIR]
+  # --work-dir: 分片/进度/元信息 sidecar 所在目录(默认与 out 同目录), 最终 mp4 可输出到其他目录
 """
 import sys, os, json, re, asyncio, subprocess, time, random
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# 环境自举: 自动使用项目 venv(video_search/.venv)运行, 无需手动指定解释器/装依赖
+import env_check  # noqa: E402
+env_check.ensure_playwright()
+env_check.check_ffmpeg()
+env_check.check_chrome()
+
 import meta_extract as me
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36"
 
 class HLSFetch:
     """在浏览器会话内解析并下载 HLS 分片。"""
-    def __init__(self, page_url, out, seg=120, retries=3):
+    def __init__(self, page_url, out, seg=120, retries=3, work_dir=None):
         self.page_url = page_url
         self.out = Path(out)
         self.seg = seg
         self.retries = retries
-        self.tmp = self.out.parent / f".{self.out.stem}_hls"
+        # 工作目录: 分片/进度/元信息 sidecar 所在; 默认与最终视频同目录。
+        # 最终 mp4(self.out)可输出到其他目录(如 Movies/系列), 工作目录保持独立,
+        # 避免临时分片污染素材目录。
+        self.work_dir = Path(work_dir) if work_dir else self.out.parent
+        self.work_dir.mkdir(parents=True, exist_ok=True)
+        self.tmp = self.work_dir / f".{self.out.stem}_hls"
         self.tmp.mkdir(parents=True, exist_ok=True)
         self.parts_path = self.tmp / "segments.json"   # 记录已下载分片(断点续传)
         self.segments = self._load_state()
@@ -302,7 +315,7 @@ class HLSFetch:
             print(f"[sub] 字幕已保存: {out.name} ({ext}, {len(text)} 字符)", flush=True)
 
     def save_meta(self):
-        """写元信息 sidecar: <out>.json(与 mp4 同目录同 basename)。"""
+        """写元信息 sidecar: <work_dir>/<id>.json(与视频同 basename, 位于工作目录)。"""
         if not self.meta:
             return
         meta = dict(self.meta)
@@ -312,7 +325,7 @@ class HLSFetch:
         if self.out.exists():
             meta["video_file"] = str(self.out)
             meta["video_size"] = self.out.stat().st_size
-        out = self.out.with_suffix(".json")
+        out = self.work_dir / f"{self.out.stem}.json"
         try:
             out.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"[meta] 元信息已保存: {out.name}", flush=True)
@@ -372,9 +385,11 @@ def main():
     ap.add_argument("--retries", type=int, default=3, help="每个分片重试次数")
     ap.add_argument("--session-retries", type=int, default=20, help="会话级重试次数(风控时等待后重开)")
     ap.add_argument("--interval", type=int, default=180, help="会话级重试间隔秒")
+    ap.add_argument("--work-dir", type=str, default=None,
+                    help="工作目录(分片/进度/sidecar), 默认与 out 同目录")
     args = ap.parse_args()
 
-    dl = HLSFetch(args.url, args.out, args.seg, args.retries)
+    dl = HLSFetch(args.url, args.out, args.seg, args.retries, work_dir=args.work_dir)
     print(f"[启动] 浏览器内fetch下载: {args.url}")
     for attempt in range(1, args.session_retries+1):
         print(f"\n===== 会话尝试 {attempt}/{args.session_retries} =====", flush=True)

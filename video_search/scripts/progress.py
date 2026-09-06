@@ -6,7 +6,7 @@ progress.py — 下载进度管理: 展示队列中所有任务的实时进度�
 数据源:
   - data/download_queue.json : 任务列表(状态 pending/downloading/done/failed)
   - data/downloads/.progress.json : 正在下载任务的实时进度(分片数/百分比/速度/ETA)
-  - data/downloads/*.mp4 : 已完成的产物(时长/大小)
+  - /Users/moonightice/Movies/系列/*.mp4 : 已完成的产物(时长/大小)
 
 用法:
   python progress.py            # 查看一次
@@ -17,7 +17,8 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
 QUEUE = BASE / "data" / "download_queue.json"
-DOWNLOADS = BASE / "data" / "downloads"
+DOWNLOADS = BASE / "data" / "downloads"            # 工作目录(进度文件)
+VIDEO_DIR = Path("/Users/moonightice/Movies/系列")  # 最终视频输出目录
 PROGRESS = DOWNLOADS / ".progress.json"
 
 
@@ -67,7 +68,7 @@ def render():
     lines.append("-" * 80)
 
     done_files = {}
-    for f in DOWNLOADS.glob("*.mp4"):
+    for f in VIDEO_DIR.glob("*.mp4"):
         done_files[f.stem] = f
 
     # 当前下载中(有实时进度且未 finished)

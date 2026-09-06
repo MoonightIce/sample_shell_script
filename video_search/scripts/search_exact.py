@@ -17,6 +17,12 @@ search_exact.py — 番号精准匹配搜索 + 下载。
 import sys, re, json, asyncio, argparse
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# 环境自举: 自动使用项目 venv(video_search/.venv)运行, 无需手动指定解释器/装依赖
+import env_check  # noqa: E402
+env_check.ensure_playwright()
+
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36"
 BASE = Path(__file__).resolve().parent
 
@@ -41,8 +47,8 @@ def similarity(a: str, b: str) -> float:
 
 def extract_id_from_meta(title: str, url: str):
     """从标题/URL 提取番号(多种形态)。返回规范化后的番号或 None。"""
-    # URL 路径: 兼容 /skmj-774 和 /dm26/fset-429 两种形态
-    m = re.search(r"missav\.ws/(?:dm\d+/)?([A-Za-z0-9][A-Za-z0-9-]*\d+)(?:#|/|$)", url)
+    # URL 路径: 兼容 /skmj-774、/dm26/fset-429、/mvsd696-chinese-subtitle(中文字幕版) 形态
+    m = re.search(r"missav\.ws/(?:dm\d+/)?([A-Za-z0-9][A-Za-z0-9-]*\d+)(?:-chinese-subtitle)?(?:#|/|$)", url)
     if m:
         return normalize(m.group(1))
     # 标题开头的番号(如 「SKMJ-774」... 或 SKMJ-774 空格...)
@@ -109,14 +115,21 @@ def url_id(idn: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (idn or "").lower())
 
 def run_layer1(query_norm, info):
-    """尝试直连 https://missav.ws/<小写番号>, 返回 (命中与否, 详情)。"""
+    """尝试直连 missav.ws/<番号> 与 missav.ws/<番号>-chinese-subtitle(中文字幕版),
+    返回 (命中与否, 详情)。中文字幕版优先, 未命中再试标准形态。"""
     uid = url_id(query_norm)
-    url = f"https://missav.ws/{uid}"
-    r = asyncio.run(fetch_m3u8_and_matches(url))
-    if not r["status"] or r["status"] != 200:
-        return False, {"url": url, "reason": "直连未返回200(可能风控/不存在)"}
-    hit, cand = layer1_direct(query_norm, r)
-    return hit, {**r, "candidate_id": cand}
+    candidates = [f"https://missav.ws/{uid}-chinese-subtitle",   # 字幕版优先
+                  f"https://missav.ws/{uid}"]                    # 标准形态兜底
+    for url in candidates:
+        r = asyncio.run(fetch_m3u8_and_matches(url))
+        if not r["status"] or r["status"] != 200:
+            continue  # 该形态未返回200(风控/不存在), 尝试下一种
+        hit, cand = layer1_direct(query_norm, r)
+        if hit:
+            return True, {**r, "candidate_id": cand}
+        # 页面200但番号不匹配(可能是风控页/其他内容), 继续尝试
+    return False, {"url": candidates[0], "reason": "直连未命中(可能风控/不存在)",
+                   "tried": candidates}
 
 def run_layer2(query_norm):
     """第二层: 搜索页 /search/<番号>, 提取每条番号字段精确比对。返回候选列表。"""
