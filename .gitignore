@@ -15,6 +15,9 @@ video_search/scripts/__pycache__/
 # 系统文件
 .DS_Store
 
+# 项目虚拟环境(自举安装 playwright, 不推送)
+video_search/.venv/
+
 # music_search_cdp: local node deps (reinstall with npm install puppeteer-core)
 music_search_cdp/node_modules/
 .superpowers/
@@ -22,3 +25,6 @@ music_charts/.venv/
 
 # music_charts: run output, not committed
 music_charts/output/
+
+# 根目录榜单抓取运行产物(日期化 JSON / 重试记录)
+/data/
