@@ -313,15 +313,26 @@ likely_count=0
 other_count=0
 skipped_paths=()   # skip 模式下被判定为重复而留下的文件, 供"壳目录"清理判断
 
+# 选择空闲名称；目录和悬空符号链接也占用名称。
+# 输出路径保存在 moved_path，避免在子 shell 中丢失结果。
+move_unique() {
+    local src="$1" base="$2" dest="$2" n=1
+    while [ -e "$dest" ] || [ -L "$dest" ]; do
+        dest="${base}_$n"
+        n=$((n + 1))
+    done
+    # -n 防止检查后出现的同名文件被覆盖；跳过时 mv 也可能返回成功。
+    if mv -n "$src" "$dest" && [ ! -e "$src" ] && [ ! -L "$src" ]; then
+        moved_path="$dest"
+        return 0
+    fi
+    return 1
+}
+
 # 移入废纸篓 (同名冲突自动加 _1/_2 序号, 避免覆盖/失败)
 # $1 文件或目录路径  $2 建议名
 trash_to() {
-    local src="$1" name="$2" dest="$HOME/.Trash/$2" n=1
-    while [ -e "$dest" ]; do
-        dest="$HOME/.Trash/${name}_$n"
-        n=$((n + 1))
-    done
-    mv "$src" "$dest" 2>/dev/null
+    move_unique "$1" "$HOME/.Trash/$2" 2>/dev/null
 }
 
 # 处理"判定为重复"的文件 (hash/time 模式共用)
@@ -338,8 +349,12 @@ handle_duplicate() {
             ;;
         rename)
             echo "[$tag] $src_name 与 [$dup_to] 内容相同 → 仍移动并重命名"
-            mv "$src_path" "${dest_path}_dup"
-            add_to_index "${dest_path}_dup"
+            if move_unique "$src_path" "${dest_path}_dup"; then
+                add_to_index "$moved_path"
+                move_count=$((move_count + 1))
+            else
+                echo "  !! 移动失败: $src_path"
+            fi
             ;;
         *)
             echo "[$tag] $src_name 与 [$dup_to] 内容相同 → 跳过 (目录清理时连同壳目录一并处理)"
@@ -368,12 +383,11 @@ moveFile() {
             fi
         else
             # TRASH_OTHERS=0: 恢复旧行为, 平级移动到目标目录
-            if [ -f "$dest_path" ]; then
-                mv "$src_path" "${dest_path}_1" 2>/dev/null
+            if move_unique "$src_path" "$dest_path"; then
+                move_count=$((move_count + 1))
             else
-                mv "$src_path" "$target_fold" 2>/dev/null
+                echo "  !! 移动失败: $src_path"
             fi
-            move_count=$((move_count + 1))
         fi
         return 0
     fi
@@ -407,22 +421,12 @@ moveFile() {
         fi
     fi
 
-    # ---- 同名文件处理 (原逻辑) ----
-    if [ -f "$dest_path" ]; then
-        echo "[重名] $src_name → ${src_name}_1"
-        if mv "$src_path" "${dest_path}_1" 2>/dev/null; then
-            add_to_index "${dest_path}_1"
-            move_count=$((move_count + 1))
-        else
-            echo "  !! 移动失败: $src_path"
-        fi
+    # ---- 同名文件处理：递增后缀，保留已有文件 ----
+    if move_unique "$src_path" "$dest_path"; then
+        add_to_index "$moved_path"
+        move_count=$((move_count + 1))
     else
-        if mv "$src_path" "$target_fold" 2>/dev/null; then
-            add_to_index "$dest_path"   # 用目标路径入索引, 供后续文件去重比对
-            move_count=$((move_count + 1))
-        else
-            echo "  !! 移动失败: $src_path"
-        fi
+        echo "  !! 移动失败: $src_path"
     fi
 }
 
@@ -477,6 +481,7 @@ getAllDir() {
 
 # ============ 执行 ============
 
+mkdir -p "$target_fold" || exit 1
 build_index "$target_fold"
 getAllDir "$fold_path"
 

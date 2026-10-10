@@ -6,7 +6,7 @@
 
 #### 重复视频识别（优化版新增）
 移动视频文件（mp4/mov/mkv 等）时会自动检测重复，识别顺序：
-1. **文件名重复** → 自动重命名加 `_1` 后缀（原逻辑）
+1. **文件名重复** → 自动递增 `_1`、`_2` 等后缀，保留已有文件
 2. **大小 + 采样指纹 + MD5（hash 模式）** → 判定字节内容完全重复
 3. **时长/分辨率相同（meta 模式）** → 提示可能是转码副本
 4. **时间戳抽帧对比（time 模式）** → 按时长均匀取 5 个时间点抽帧解码，对齐时间戳对比像素 MD5，可跨容器/封装识别同一内容
@@ -42,22 +42,20 @@ DEDUP_MODE=none ./MoveFiles.sh ~/Downloads ~/Videos
 - 脚本兼容 macOS（bash 3.2）与 Linux（bash 4+），未使用关联数组
 - 目录清理规则（移入废纸篓 ~/.Trash，可恢复，不会 rm）：①移动后变空的目录；②只剩被跳过重复文件的"壳目录"（其中没有任何其他文件时才会删，移动失败/未处理的文件会阻止删除）
 - 所有进废纸篓的操作（非视频文件/重复文件/空目录/壳目录）同名冲突时自动加 `_1` 序号，不会覆盖已有文件
-- 非空目录不会删除；重复文件被跳过时所在目录会保留
+- 含未处理文件的目录会保留；只剩跳过重复文件的目录按上述壳目录规则处理
 
-### one_music_library
+### music_search_cdp
 Claude Code skill + Python 脚本，把 1music.cc 的浏览器下载流程和本地音乐库整理串起来：下载后的音频交给 [`ghcr.io/laoning666/lyricflow`](https://github.com/laoning666/lyricflow) 补歌词/封面/基础标签，再按 `album` 标签归档到目标库目录。
 
-- [`SKILL.md`](one_music_library/SKILL.md)：Claude Code skill 定义，描述何时用浏览器操作 1music.cc、何时调用脚本。
-- [`references/site-flow.md`](one_music_library/references/site-flow.md)：1music.cc 页面流程记录（Turnstile 验证、搜索、下载）。
-- [`scripts/music_workflow.py`](one_music_library/scripts/music_workflow.py)：核心脚本，暂存下载文件 → 跑 LyricFlow 容器 → 用 `ffprobe` 读 `album` 标签归档 → 写 JSON 清单。
-- [`bin/music-workflow`](one_music_library/bin/music-workflow)：命令行入口，转发到上面的 Python 脚本。
+- [`SKILL.md`](music_search_cdp/SKILL.md)：Claude Code skill 定义，描述何时用浏览器操作 1music.cc、何时调用脚本。
+- [`references/site-flow.md`](music_search_cdp/references/site-flow.md)：1music.cc 页面流程记录（Turnstile 验证、搜索、下载）。
+- [`scripts/organize_with_lyricflow.py`](music_search_cdp/scripts/organize_with_lyricflow.py)：核心脚本，暂存下载文件 → 跑 LyricFlow 容器 → 用 `ffprobe` 读 `album` 标签归档 → 写 JSON 清单。
 
 用法示例：
 ```bash
-./one_music_library/bin/music-workflow \
+python3 music_search_cdp/scripts/organize_with_lyricflow.py \
   --source "/absolute/path/to/Artist - Title.flac" \
-  --library "/absolute/path/to/library" \
-  --move-source
+  --library "/absolute/path/to/library"
 ```
 
 依赖：`python3`、`ffprobe`（FFmpeg）、`docker`（跑 LyricFlow 镜像，默认 `API_PROVIDER=lrcapi`）。加 `--dry-run` 只打印计划的 docker 命令和源文件，不写入、不联网。
