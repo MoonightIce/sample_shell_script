@@ -28,3 +28,6 @@ music_charts/output/
 
 # 根目录榜单抓取运行产物(日期化 JSON / 重试记录)
 /data/
+
+# 本地嵌套 Git 工作区
+/.claude/worktrees/

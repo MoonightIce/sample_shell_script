@@ -1,0 +1,1 @@
+import e from"node:os";import t from"node:path";function n(t){return t?.HOME?.trim()||e.homedir()}function r(e,r={}){return e===`~`?n(r.env):e.startsWith(`~/`)?t.join(n(r.env),e.slice(2)):e}function i(e,n={}){let i=r(e,n);return t.isAbsolute(i)?i:t.resolve(n.cwd??process.cwd(),i)}export{i as n,r as t};

@@ -1,0 +1,1 @@
+import{_ as e}from"./sdk-contracts.js";const t=`user-installed`;function n(e){return e??`user-installed`}function r(t){if(t===void 0)throw new e(`INVALID_ARGS`,`appsFilter must be resolved before executing the apps command`);return t}export{r as n,n as r,t};

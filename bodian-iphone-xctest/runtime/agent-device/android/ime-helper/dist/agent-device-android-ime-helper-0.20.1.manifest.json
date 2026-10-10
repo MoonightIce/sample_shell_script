@@ -1,0 +1,10 @@
+{
+  "name": "android-ime-helper",
+  "version": "0.20.1",
+  "assetName": "agent-device-android-ime-helper-0.20.1.apk",
+  "sha256": "8dc8135211465ef283d1c5175024638becb783b6975ecfd0b9a3ea38637eaa1c",
+  "packageName": "com.callstack.agentdevice.imehelper",
+  "versionCode": 20001,
+  "serviceComponent": "com.callstack.agentdevice.imehelper/.TestInputMethodService",
+  "broadcastProtocol": "android-ime-helper-v1"
+}

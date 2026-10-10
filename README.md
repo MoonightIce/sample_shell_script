@@ -59,3 +59,22 @@ python3 music_search_cdp/scripts/organize_with_lyricflow.py \
 ```
 
 依赖：`python3`、`ffprobe`（FFmpeg）、`docker`（跑 LyricFlow 镜像，默认 `API_PROVIDER=lrcapi`）。加 `--dry-run` 只打印计划的 docker 命令和源文件，不写入、不联网。
+
+### bodian-iphone-xctest
+
+[Skill](bodian-iphone-xctest/SKILL.md) + Python 脚本 + 独立 `agent-device` / XCTest Runner，通过 Mac 控制 `chengbinghui的iPhone`，自动领取波点音乐福利会员。页面实际剩余天数达到目标后停止，并返回“我的”。
+
+```sh
+# 默认目标 7 天
+python3 bodian-iphone-xctest/scripts/run.py --target-days 7
+
+# 从当前页面继续
+python3 bodian-iphone-xctest/scripts/run.py --target-days 7 --resume
+
+# 读取已建立会话的当前界面
+python3 bodian-iphone-xctest/scripts/run.py --inspect
+```
+
+需 Node.js >=22.12、Python 3、Xcode，以及已连接、配对、解锁并开启开发者模式的 iPhone。签名配置适用于当前 Mac，证书私钥和 provisioning profile 不随仓库分发；换机器时参见 [XCTest 配置与排障](bodian-iphone-xctest/references/xctest.md)。运行截图及结果保存在模块的 `runs/`，已加入忽略规则。
+
+通用 XCTest 控制入口为 `python3 bodian-iphone-xctest/scripts/device.py <agent-device 命令及参数>`。流程分支和验证边界见 [流程与验收](bodian-iphone-xctest/references/workflow.md)。

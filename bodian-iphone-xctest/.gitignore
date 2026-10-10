@@ -1,0 +1,7 @@
+runs/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Xcode 本机界面状态
+**/xcuserdata/

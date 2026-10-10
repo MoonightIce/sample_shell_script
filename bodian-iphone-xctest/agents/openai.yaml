@@ -1,0 +1,4 @@
+interface:
+  display_name: "波点音乐 · iPhone XCTest"
+  short_description: "通过 Mac 的 XCTest 控制指定 iPhone，领取福利会员至目标天数后停止"
+  default_prompt: "使用 $bodian-iphone-xctest 在 chengbinghui的iPhone 上领取波点音乐福利会员，剩余达到 7 天后停止并返回我的。"
