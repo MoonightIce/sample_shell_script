@@ -1,6 +1,6 @@
 # video_search — 视频语义/画面检索系统
 
-按技术方案 `video_semantic_search_design.md` 实现的视频检索系统。
+按技术方案 [设计方案](docs/video_semantic_search_design.md) 实现的视频检索系统。
 
 **当前状态：骨架已在本机跑通**（采集→抽帧→特征入库→检索全链路）。
 受限于本机沙箱网络下载限制（≈10MB 封顶，无法安装 torch/CLIP/opencv），

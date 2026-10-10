@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 
-SCRIPT = Path(__file__).resolve().parents[1] / 'MoveFiles.sh'
+SCRIPT = Path(__file__).resolve().parents[1] / 'scripts' / 'MoveFiles.sh'
 
 
 class MoveFilesTests(unittest.TestCase):

@@ -1,80 +1,39 @@
 # sample_shell_script
-简单的脚本
-### MoveFiles
-可以接受两个参数，第一个参数是需要移动文件的目录 fold_path 。第二参数是移动文件的目标目录 target_fold ，如果不传就在移动到当前的目录 fold_path。
-将文件移动之后，会判断文件夹是否为空，为空就会删除文件夹（移入废纸篓 ~/.Trash，不会直接 rm）。
 
-#### 重复视频识别（优化版新增）
-移动视频文件（mp4/mov/mkv 等）时会自动检测重复，识别顺序：
-1. **文件名重复** → 自动递增 `_1`、`_2` 等后缀，保留已有文件
-2. **大小 + 采样指纹 + MD5（hash 模式）** → 判定字节内容完全重复
-3. **时长/分辨率相同（meta 模式）** → 提示可能是转码副本
-4. **时间戳抽帧对比（time 模式）** → 按时长均匀取 5 个时间点抽帧解码，对齐时间戳对比像素 MD5，可跨容器/封装识别同一内容
+按工具组织的本地自动化脚本。下面的入口路径均相对仓库根目录。
 
-通过环境变量控制，全部有默认值，不设置即为推荐行为：
+| 工具 | 目录与说明 | 主要入口 |
+|---|---|---|
+| 文件整理与去重 | [file_sorter](file_sorter/README.md) | `bash file_sorter/scripts/MoveFiles.sh <源目录> [目标目录]` |
+| 视频下载与检索 | [video_search](video_search/README.md) | `video_search/scripts/run_pipeline.py`；简单下载示例为 `scripts/download_videos.py` |
+| 多平台音乐榜单 | [music_charts Skill](music_charts/SKILL.md) | `music_charts/scripts/fetch_charts.py` |
+| 浏览器音乐搜索与归档 | [music_search_cdp Skill](music_search_cdp/SKILL.md) | `music_search_cdp/scripts/search_1music.js` |
+| 音乐批处理与流程调度 | [music_pipeline](music_pipeline/README.md) · [Skill](music_pipeline/SKILL.md) | `music_pipeline/scripts/run_pipeline.py`、`chart_download.py` |
+| 歌词与音频标签 | [lyricflow](lyricflow/README.zh-CN.md) | 第三方工具，音乐流程按需调用 |
+| NAS 下载自动归档 | [nas_archive](nas_archive/README.md) | `nas_archive/scripts/nas_qbt_archive.sh`、`qbt_hook.sh` |
+| 波点 iPhone 自动化 | [bodian-iphone-xctest Skill](bodian-iphone-xctest/SKILL.md) | `python3 bodian-iphone-xctest/scripts/run.py --target-days 7` |
 
-| 环境变量 | 取值 | 默认 | 说明 |
-|---|---|---|---|
-| `DEDUP_MODE` | `none` / `hash` / `meta` / `time` | `hash` | `none` 恢复原行为；`hash` 按大小+采样指纹+MD5 去重（快）；`meta` 用 ffprobe 比对时长/分辨率提示转码副本；`time` 按时间戳抽 5 帧像素 MD5 对比（深度，最慢但能识别 remux） |
-| `DEDUP_ACTION` | `skip` / `rename` / `trash` | `skip` | `skip` 重复的不移动；若某目录最终只剩被跳过的重复文件，该"壳目录"连同文件整体移入废纸篓（可恢复）；`rename` 移动并重命名保留；`trash` 移入废纸篓 |
-| `TRASH_OTHERS` | `0` / `1` | `1` | 非视频文件（txt/图片/说明文档）移入废纸篓，目标目录只保留纯视频；设 `0` 恢复旧行为（非视频平级移动到目标目录） |
+音乐下载分为浏览器交互和批处理两个模块，因此这里按目录列出八项；按用途可以合并为七类工具。
 
-用法示例：
-```bash
-# 默认：大小+采样指纹去重，重复文件跳过（快，适合大批量）
-./MoveFiles.sh ~/Downloads ~/Videos
+## 目录约定
 
-# 提示转码副本（需要 ffmpeg/ffprobe）
-DEDUP_MODE=meta ./MoveFiles.sh ~/Downloads ~/Videos
+- `scripts/` 放可执行脚本；`tests/` 放该工具测试。
+- `references/` 或既有 `docs/` 放流程、设计和排障资料。
+- 有 Agent 入口的工具保留 `SKILL.md`，其中相对路径以 Skill 所在目录为基准。
+- `lyricflow/` 和波点的 `runtime/` 保留第三方结构、许可证及运行依赖。
+- 根目录旧脚本和旧文档名是兼容符号链接，真实文件在工具目录。新命令使用表中的入口；不要把单个链接复制到其他机器，部署时复制实际脚本。
+- 根目录 `docs/superpowers/` 是历史方案与计划；`tests/` 检查跨工具目录和兼容入口。
 
-# 时间戳对齐抽帧对比：能识别"同一视频不同封装"（如 mp4→mkv remux）
-DEDUP_MODE=time ./MoveFiles.sh ~/Downloads ~/Videos
-
-# 保持原行为（只处理同名）
-DEDUP_MODE=none ./MoveFiles.sh ~/Downloads ~/Videos
-```
-
-说明：
-- 重复识别只针对视频扩展名（mp4 m4v mov avi mkv webm flv wmv ts mpg mpeg 3gp rmvb rm），其他文件不受影响
-- 三步判定：①按文件大小分组（秒级）→ ②采样指纹，只读头/尾各 1MB（毫秒级）→ ③采样相同才做全量 MD5（秒级，极少触发）。实测 1GB 视频全量 MD5 约 5 秒，采样约 0.03 秒（约 200 倍差距），大视频不再全量哈希
-- `DEDUP_MODE=meta` 的 ffprobe 只读容器头部（mp4 的 moov atom），耗时约 0.3 秒/次且**与文件大小无关**；但它是按调用次数累计的，目标目录文件很多时建议用默认 hash 模式
-- `DEDUP_MODE=time` 的抽帧对齐：时间点四舍五入到整数秒，规避 mp4/mkv 容器时间基差异导致的 ±1 帧偏差（实测小数秒会抽到相邻帧）；有损转码（重压）像素有量化差异，MD5 判不出，这是 MD5 的固有边界；短视频（不足 2 个采样点）自动放弃判定，不会误删
-- 脚本兼容 macOS（bash 3.2）与 Linux（bash 4+），未使用关联数组
-- 目录清理规则（移入废纸篓 ~/.Trash，可恢复，不会 rm）：①移动后变空的目录；②只剩被跳过重复文件的"壳目录"（其中没有任何其他文件时才会删，移动失败/未处理的文件会阻止删除）
-- 所有进废纸篓的操作（非视频文件/重复文件/空目录/壳目录）同名冲突时自动加 `_1` 序号，不会覆盖已有文件
-- 含未处理文件的目录会保留；只剩跳过重复文件的目录按上述壳目录规则处理
-
-### music_search_cdp
-Claude Code skill + Python 脚本，把 1music.cc 的浏览器下载流程和本地音乐库整理串起来：下载后的音频交给 [`ghcr.io/laoning666/lyricflow`](https://github.com/laoning666/lyricflow) 补歌词/封面/基础标签，再按 `album` 标签归档到目标库目录。
-
-- [`SKILL.md`](music_search_cdp/SKILL.md)：Claude Code skill 定义，描述何时用浏览器操作 1music.cc、何时调用脚本。
-- [`references/site-flow.md`](music_search_cdp/references/site-flow.md)：1music.cc 页面流程记录（Turnstile 验证、搜索、下载）。
-- [`scripts/organize_with_lyricflow.py`](music_search_cdp/scripts/organize_with_lyricflow.py)：核心脚本，暂存下载文件 → 跑 LyricFlow 容器 → 用 `ffprobe` 读 `album` 标签归档 → 写 JSON 清单。
-
-用法示例：
-```bash
-python3 music_search_cdp/scripts/organize_with_lyricflow.py \
-  --source "/absolute/path/to/Artist - Title.flac" \
-  --library "/absolute/path/to/library"
-```
-
-依赖：`python3`、`ffprobe`（FFmpeg）、`docker`（跑 LyricFlow 镜像，默认 `API_PROVIDER=lrcapi`）。加 `--dry-run` 只打印计划的 docker 命令和源文件，不写入、不联网。
-
-### bodian-iphone-xctest
-
-[Skill](bodian-iphone-xctest/SKILL.md) + Python 脚本 + 独立 `agent-device` / XCTest Runner，通过 Mac 控制 `chengbinghui的iPhone`，自动领取波点音乐福利会员。页面实际剩余天数达到目标后停止，并返回“我的”。
+## 本地验证
 
 ```sh
-# 默认目标 7 天
-python3 bodian-iphone-xctest/scripts/run.py --target-days 7
-
-# 从当前页面继续
-python3 bodian-iphone-xctest/scripts/run.py --target-days 7 --resume
-
-# 读取已建立会话的当前界面
-python3 bodian-iphone-xctest/scripts/run.py --inspect
+python3 -m venv /tmp/sample-shell-tests
+/tmp/sample-shell-tests/bin/pip install -r music_charts/requirements.txt -r music_pipeline/requirements.txt
+/tmp/sample-shell-tests/bin/python -m pytest music_charts/tests file_sorter/tests tests -q
 ```
 
-需 Node.js >=22.12、Python 3、Xcode，以及已连接、配对、解锁并开启开发者模式的 iPhone。签名配置适用于当前 Mac，证书私钥和 provisioning profile 不随仓库分发；换机器时参见 [XCTest 配置与排障](bodian-iphone-xctest/references/xctest.md)。运行截图及结果保存在模块的 `runs/`，已加入忽略规则。
+测试验证本地逻辑和目录迁移，不代表在线下载、NAS 部署或 iPhone 真机流程已经验收。
 
-通用 XCTest 控制入口为 `python3 bodian-iphone-xctest/scripts/device.py <agent-device 命令及参数>`。流程分支和验证边界见 [流程与验收](bodian-iphone-xctest/references/workflow.md)。
+## 外部入口
+
+目录整理保留了原有 Skill 目录和 NAS `/config/scripts/` 部署路径。独立安装的 Skill 副本不会随仓库自动更新。NAS 部署、定时任务和设备操作仍按各工具说明执行；本次目录整理不自动触发这些操作。

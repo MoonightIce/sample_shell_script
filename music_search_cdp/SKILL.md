@@ -5,6 +5,8 @@ description: Connect to a local Chrome instance over the Chrome DevTools Protoco
 
 # 1music.cc search + download + library pipeline via local Chrome CDP
 
+路径约定：以下 `scripts/`、`references/` 均相对本 Skill 目录。先进入该目录；若已在其中，不要再次执行 `cd music_search_cdp`。
+
 Three scripts, run in sequence:
 
 1. [scripts/search_1music.js](scripts/search_1music.js) — search, list results. Never

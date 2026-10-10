@@ -1,0 +1,3 @@
+httpx>=0.27
+websocket-client>=1.8
+# Optional: opencc-python-reimplemented for simplified/traditional normalization.

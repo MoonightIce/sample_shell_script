@@ -5,6 +5,8 @@ description: Fetch song-level chart data (title, artist, album, plus whatever pl
 
 # Music charts snapshot (netease / qqmusic / apple_music / billboard)
 
+路径约定：以下 `scripts/`、`references/` 均相对本 Skill 目录。先进入该目录；若已在其中，不要再次执行 `cd music_charts`。
+
 ## Setup (once)
 
 ```bash
